@@ -11,7 +11,12 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-export function ChatInput({ onSend, isLoading, onStop, disabled }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  isLoading,
+  onStop,
+  disabled,
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,16 +45,17 @@ export function ChatInput({ onSend, isLoading, onStop, disabled }: ChatInputProp
   return (
     <div className="max-w-3xl mx-auto p-4 relative">
       <div className="relative flex items-end gap-2 bg-background border rounded-xl shadow-lg shadow-black/5 dark:shadow-white/5 p-3 focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-primary transition-all duration-200">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="shrink-0 text-muted-foreground hover:text-foreground h-9 w-9 rounded-lg"
           disabled={disabled || isLoading}
+          type="button"
         >
           <Paperclip className="h-5 w-5" />
           <span className="sr-only">Attach file</span>
         </Button>
-        
+
         <Textarea
           ref={textareaRef}
           value={input}
@@ -62,26 +68,32 @@ export function ChatInput({ onSend, isLoading, onStop, disabled }: ChatInputProp
         />
 
         {isLoading ? (
-          <Button 
+          <Button
             onClick={onStop}
             size="icon"
             className="shrink-0 rounded-lg h-9 w-9 bg-primary text-primary-foreground hover:bg-primary/90"
+            type="button"
           >
             <StopCircle className="h-4 w-4" />
           </Button>
         ) : (
-          <Button 
-            onClick={handleSubmit} 
+          <Button
+            onClick={handleSubmit}
             disabled={!input.trim() || disabled}
             size="icon"
             className={cn(
               "shrink-0 rounded-lg h-9 w-9 transition-all duration-200",
-              input.trim() 
-                ? "bg-primary text-primary-foreground hover:bg-primary/90" 
-                : "bg-muted text-muted-foreground hover:bg-muted"
+              input.trim()
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-muted text-muted-foreground hover:bg-muted",
             )}
+            type="button"
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <SendHorizontal className="h-4 w-4" />
+            )}
           </Button>
         )}
       </div>

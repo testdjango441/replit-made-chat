@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
@@ -11,11 +11,14 @@ export default function NotFound() {
           <div className="w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 dark:text-red-400">
             <AlertTriangle className="h-10 w-10" />
           </div>
-          
+
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tighter">404 Page Not Found</h1>
+            <h1 className="text-3xl font-bold tracking-tighter">
+              404 Page Not Found
+            </h1>
             <p className="text-muted-foreground">
-              We couldn't find the page you were looking for. It might have been moved or deleted.
+              We couldn't find the page you were looking for. It might have been
+              moved or deleted.
             </p>
           </div>
 
