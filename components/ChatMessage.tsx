@@ -1,14 +1,21 @@
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { User, Bot, Loader2, CheckCircle2, XCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { User, Bot, Loader2, CheckCircle2, XCircle, ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
+
+interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+}
 
 interface ToolEvent {
   status: string;
   isLoading?: boolean;
   success?: boolean;
+  tool?: string;
   tool_result?: any;
 }
 
@@ -16,19 +23,45 @@ interface ChatMessageProps {
   role: "user" | "assistant" | "system";
   content?: string;
   isStreaming?: boolean;
-  isThinking?: boolean; // Add this
+  isThinking?: boolean;
   toolEvents?: ToolEvent[];
+  toolCalls?: ToolCall[]; // For completed tool calls from history
 }
 
-export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents }: ChatMessageProps) {
+export function ChatMessage({ 
+  role, 
+  content, 
+  isStreaming, 
+  isThinking, 
+  toolEvents,
+  toolCalls 
+}: ChatMessageProps) {
   const isUser = role === "user";
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
+  const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
 
   // Debug logging
-  console.log("ChatMessage render:", { role, content: content?.substring(0, 50), toolEvents });
+  console.log("ChatMessage render:", { 
+    role, 
+    content: content?.substring(0, 50), 
+    toolEvents,
+    toolCalls 
+  });
 
   const toggleToolExpand = (index: number) => {
     setExpandedTools(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleResultExpand = (index: number) => {
+    setExpandedResults(prev => {
       const newSet = new Set(prev);
       if (newSet.has(index)) {
         newSet.delete(index);
@@ -72,10 +105,84 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
                   <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
+                <span className="text-sm">Thinking...</span>
               </div>
             ) : (
               <>
-                {/* Inline Tool Events - Display BEFORE content */}
+                {/* Tool Calls from History (Completed) */}
+                {toolCalls && toolCalls.length > 0 && (
+                  <div className="mb-4 space-y-2 not-prose">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Wrench className="w-3 h-3" />
+                      Tools Used
+                    </div>
+                    {toolCalls.map((toolCall, index) => (
+                      <motion.div
+                        key={toolCall.id}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
+                      >
+                        <div
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-md text-sm border transition-colors",
+                            "bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/50 text-purple-800 dark:text-purple-200",
+                            Object.keys(toolCall.args).length > 0 && "cursor-pointer"
+                          )}
+                          onClick={() => {
+                            if (Object.keys(toolCall.args).length > 0) {
+                              toggleToolExpand(index);
+                            }
+                          }}
+                        >
+                          {/* Tool Icon */}
+                          <div className="shrink-0">
+                            <Wrench className="w-3.5 h-3.5" />
+                          </div>
+
+                          {/* Tool Name */}
+                          <div className="flex-1">
+                            <span className="font-medium">{toolCall.name}</span>
+                          </div>
+
+                          {/* Expand/Collapse Icon */}
+                          {Object.keys(toolCall.args).length > 0 && (
+                            <div className="shrink-0">
+                              {expandedTools.has(index) ? (
+                                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                              ) : (
+                                <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Expanded Tool Arguments */}
+                        <AnimatePresence>
+                          {expandedTools.has(index) && Object.keys(toolCall.args).length > 0 && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="mt-2 p-3 rounded-md bg-muted/50 border border-border">
+                                <div className="text-xs font-medium text-muted-foreground mb-1.5">Arguments:</div>
+                                <pre className="text-xs overflow-x-auto whitespace-pre-wrap text-foreground">
+                                  {JSON.stringify(toolCall.args, null, 2)}
+                                </pre>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Real-time Tool Events (Streaming) */}
                 {toolEvents && toolEvents.length > 0 && (
                   <div className="mb-4 space-y-2 not-prose">
                     {toolEvents.map((toolEvent, index) => (
@@ -98,7 +205,7 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
                           )}
                           onClick={() => {
                             if (toolEvent.tool_result && Object.keys(toolEvent.tool_result).length > 0) {
-                              toggleToolExpand(index);
+                              toggleResultExpand(index);
                             }
                           }}
                         >
@@ -113,15 +220,20 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
                             )}
                           </div>
 
-                          {/* Status Text */}
-                          <div className="flex-1 font-medium">
-                            {toolEvent.status}
+                          {/* Status Text with Tool Name */}
+                          <div className="flex-1">
+                            <div className="font-medium">{toolEvent.status}</div>
+                            {toolEvent.tool && (
+                              <div className="text-xs opacity-70 mt-0.5">
+                                {toolEvent.tool}
+                              </div>
+                            )}
                           </div>
 
                           {/* Expand/Collapse Icon */}
                           {toolEvent.tool_result && Object.keys(toolEvent.tool_result).length > 0 && (
                             <div className="shrink-0">
-                              {expandedTools.has(index) ? (
+                              {expandedResults.has(index) ? (
                                 <ChevronDown className="w-3.5 h-3.5 opacity-60" />
                               ) : (
                                 <ChevronRight className="w-3.5 h-3.5 opacity-60" />
@@ -132,7 +244,7 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
 
                         {/* Expanded Tool Result */}
                         <AnimatePresence>
-                          {expandedTools.has(index) && toolEvent.tool_result && Object.keys(toolEvent.tool_result).length > 0 && (
+                          {expandedResults.has(index) && toolEvent.tool_result && Object.keys(toolEvent.tool_result).length > 0 && (
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: "auto", opacity: 1 }}
@@ -141,6 +253,7 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
                               className="overflow-hidden"
                             >
                               <div className="mt-2 p-3 rounded-md bg-muted/50 border border-border">
+                                <div className="text-xs font-medium text-muted-foreground mb-1.5">Result:</div>
                                 <pre className="text-xs overflow-x-auto whitespace-pre-wrap text-foreground">
                                   {JSON.stringify(toolEvent.tool_result, null, 2)}
                                 </pre>

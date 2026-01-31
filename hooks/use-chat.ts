@@ -125,14 +125,39 @@ type ChatSession = {
   title: string;
 };
 
-type ChatMessage = {
+type ToolCall = {
+  id: string;
+  name: string;
+  args: Record<string, any>;
+};
+
+type HumanMessageData = {
+  id?: string;
+  type: "human";
+  content: string;
+  input_files: string[];
+};
+
+type AiMessageData = {
+  id?: string;
+  type: "ai";
+  content?: string;
+  tool_calls: ToolCall[];
+  output_files: string[];
+};
+
+type ToolMessageData = {
+  id?: string;
+  type: "tool";
+  content?: string;
+  artifact?: Record<string, any>;
+  tool_call_id?: string;
+};
+
+type ChatMessageResponse = {
   session_id: string;
   created_at: string;
-  message_id: string;
-  role: "user" | "assistant";
-  content: string;
-  input_files?: string[];
-  output_files?: string[];
+  data: (HumanMessageData | AiMessageData | ToolMessageData)[];
 };
 
 // Helper function to get headers with auth token
@@ -207,7 +232,6 @@ export function useCreateSession() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    // Check localStorage for user to determine if authenticated
     mutationFn: async (title: string = "New Chat") => {
       let user: any = null;
       try {
@@ -218,7 +242,6 @@ export function useCreateSession() {
       }
 
       if (user) {
-        // Authenticated: use create endpoint with auth
         console.log("Creating session (authenticated):", user.email);
         const res = await fetch(
           `${backendUrl}/api/chat-session/create/`,
@@ -231,7 +254,6 @@ export function useCreateSession() {
         if (!res.ok) throw new Error("Failed to create session");
         return res.json();
       } else {
-        // Unauthenticated: use noauth endpoint
         console.log("Creating session (unauthenticated)");
         const res = await fetch(
           `${backendUrl}/api/chat-session/create/noauth/`,
@@ -242,7 +264,6 @@ export function useCreateSession() {
       }
     },
     onSuccess: () => {
-      // Invalidate chat sessions so sidebar updates automatically
       queryClient.invalidateQueries({ queryKey: ["chatSessions"] });
     },
   });
@@ -250,8 +271,6 @@ export function useCreateSession() {
 
 // Hook for fetching messages for a specific session
 export function useChatHistory(sessionId?: string | null) {
-  // Only fetch history if user is authenticated (exists in localStorage)
-  // Guest users don't have persistent history
   const isAuthenticated = typeof window !== 'undefined' && !!localStorage.getItem("user");
 
   return useQuery({
@@ -267,9 +286,40 @@ export function useChatHistory(sessionId?: string | null) {
         ),
       );
       if (!res.ok) throw new Error("Failed to fetch history");
-      return res.json();
+      const data = await res.json();
+      
+      // Transform the new format to flat messages for UI
+      const flatMessages: any[] = [];
+      
+      for (const item of data) {
+        const messageData = typeof item.data === 'string' 
+          ? JSON.parse(item.data) 
+          : item.data;
+        
+        for (const msg of messageData) {
+          if (msg.type === "human") {
+            flatMessages.push({
+              role: "user",
+              content: msg.content,
+              input_files: msg.input_files || [],
+              created_at: item.created_at,
+            });
+          } else if (msg.type === "ai") {
+            flatMessages.push({
+              role: "assistant",
+              content: msg.content || "",
+              tool_calls: msg.tool_calls || [],
+              output_files: msg.output_files || [],
+              created_at: item.created_at,
+            });
+          }
+          // Tool messages are embedded in AI messages, so we don't need to show them separately
+        }
+      }
+      
+      return flatMessages;
     },
-    enabled: !!sessionId && isAuthenticated, // Only fetch for authenticated users
+    enabled: !!sessionId && isAuthenticated,
   });
 }
 
@@ -306,9 +356,7 @@ export function useChatStream() {
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const abortControllerRef = useRef<AbortController | null>(null);
-  const activeToolCallRef = useRef<string | null>(null);
 
-  // Helper to add a user message locally immediately
   const addUserMessage = (content: string) => {
     setMessages((prev) => [
       ...prev,
@@ -320,224 +368,236 @@ export function useChatStream() {
     setMessages(history);
   };
 
-// Check localStorage for user to determine auth state
-const sendMessage = async (message: string, sessionId: string) => {
-  setIsLoading(true);
+  const sendMessage = async (message: string, sessionId: string) => {
+    setIsLoading(true);
 
-  // Add placeholder assistant message with "Thinking..." immediately
-  const placeholderId = `assistant_${Date.now()}`;
-  setMessages((prev) => [
-    ...prev,
-    {
-      id: placeholderId,
-      role: "assistant",
-      content: "",
-      isStreaming: true,
-      isThinking: true, // Flag to show "Thinking..." state
-      toolEvents: [],
-    },
-  ]);
+    // Add placeholder assistant message with "Thinking..." immediately
+    const placeholderId = `assistant_${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: placeholderId,
+        role: "assistant",
+        content: "",
+        isStreaming: true,
+        isThinking: true,
+        toolEvents: [],
+        toolCalls: [], // For completed tool calls
+        currentTurn: 0,
+      },
+    ]);
 
-  abortControllerRef.current = new AbortController();
+    abortControllerRef.current = new AbortController();
 
-  // Check localStorage for user - this is the source of truth
-  let user: any = null;
-  try {
-    const stored = localStorage.getItem("user");
-    if (stored) user = JSON.parse(stored);
-  } catch (e) {
-    user = null;
-  }
+    // Check localStorage for user
+    let user: any = null;
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) user = JSON.parse(stored);
+    } catch (e) {
+      user = null;
+    }
 
-  try {
-    // Route to correct endpoint based on auth state
-    const endpoint = user
-      ? `${backendUrl}/api/chat/authenticated/`
-      : `${backendUrl}/api/chat/unauthenticated/`;
+    try {
+      const endpoint = user
+        ? `${backendUrl}/api/chat/authenticated/`
+        : `${backendUrl}/api/chat/unauthenticated/`;
 
-    const payload = user
-      ? {
-          user_message: message,
-          session_id: sessionId,
-          user_email: user.email,
-        }
-      : { user_message: message, session_id: sessionId };
+      const payload = user
+        ? {
+            user_message: message,
+            session_id: sessionId,
+            user_email: user.email,
+          }
+        : { user_message: message, session_id: sessionId };
 
-    console.log("Chat request:", {
-      endpoint,
-      isAuthenticated: !!user,
-      payload,
-      headers: getHeaders(true, !!user),
-    });
+      console.log("Chat request:", {
+        endpoint,
+        isAuthenticated: !!user,
+        payload,
+      });
 
-    const response = await fetch(
-      endpoint,
-      getFetchOptions(
-        "POST",
-        getHeaders(true, !!user),
-        JSON.stringify(payload),
-        abortControllerRef.current.signal,
-      ),
-    );
-
-    console.log(
-      "Chat response status:",
-      response.status,
-      response.statusText,
-    );
-
-    if (!response.ok)
-      throw new Error(
-        `Stream connection failed: ${response.status} ${response.statusText}`,
+      const response = await fetch(
+        endpoint,
+        getFetchOptions(
+          "POST",
+          getHeaders(true, !!user),
+          JSON.stringify(payload),
+          abortControllerRef.current.signal,
+        ),
       );
-    if (!response.body) throw new Error("No response body");
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let currentEvent = "";
-    let currentToolIndex: number | null = null;
-    let hasReceivedFirstChunk = false;
+      console.log("Chat response status:", response.status, response.statusText);
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      if (!response.ok)
+        throw new Error(
+          `Stream connection failed: ${response.status} ${response.statusText}`,
+        );
+      if (!response.body) throw new Error("No response body");
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete line
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let currentEvent = "";
+      let currentToolEventIndex: number | null = null;
+      let hasReceivedFirstChunk = false;
+      let allToolCalls: ToolCall[] = []; // Track completed tool calls across turns
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(":")) continue; // Skip empty lines and comments
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        // Parse SSE format: "event: eventName" or "data: jsonData"
-        if (trimmed.startsWith("event:")) {
-          currentEvent = trimmed.substring(6).trim();
-          console.log("📌 Event received:", currentEvent);
-        } else if (trimmed.startsWith("data:")) {
-          const dataStr = trimmed.substring(5).trim();
-          if (!dataStr) continue; // Skip empty data
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-          try {
-            // Handle chunk events
-            if (currentEvent === "chunk") {
-              const data = JSON.parse(dataStr);
-              const token = data.chunk;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(":")) continue;
 
-              if (!hasReceivedFirstChunk) {
-                // First chunk - replace "Thinking..." with actual content
-                console.log("✅ First chunk received, replacing thinking state");
-                setMessages((prev) => {
-                  return prev.map((msg) => {
-                    if (msg.id === placeholderId && msg.role === "assistant") {
-                      return { 
-                        ...msg, 
-                        content: token, 
-                        isThinking: false, // Remove thinking state
-                        isStreaming: true 
-                      };
-                    }
-                    return msg;
+          if (trimmed.startsWith("event:")) {
+            currentEvent = trimmed.substring(6).trim();
+            console.log("📌 Event received:", currentEvent);
+          } else if (trimmed.startsWith("data:")) {
+            const dataStr = trimmed.substring(5).trim();
+            if (!dataStr) continue;
+
+            try {
+              // Handle chunk events
+              if (currentEvent === "chunk") {
+                const data = JSON.parse(dataStr);
+                const token = data.chunk;
+
+                if (!hasReceivedFirstChunk) {
+                  console.log("✅ First chunk received, replacing thinking state");
+                  setMessages((prev) => {
+                    return prev.map((msg) => {
+                      if (msg.id === placeholderId && msg.role === "assistant") {
+                        return {
+                          ...msg,
+                          content: token,
+                          isThinking: false,
+                          isStreaming: true,
+                        };
+                      }
+                      return msg;
+                    });
                   });
-                });
-                setIsLoading(false);
-                hasReceivedFirstChunk = true;
-              } else {
-                // Append to existing message
+                  setIsLoading(false);
+                  hasReceivedFirstChunk = true;
+                } else {
+                  setMessages((prev) => {
+                    return prev.map((msg) => {
+                      if (msg.id === placeholderId && msg.role === "assistant") {
+                        return { ...msg, content: msg.content + token };
+                      }
+                      return msg;
+                    });
+                  });
+                }
+              }
+              // Handle toolCallStart events
+              else if (currentEvent === "toolCallStart") {
+                const data = JSON.parse(dataStr);
+                console.log("🔧 Tool call started:", data);
+
                 setMessages((prev) => {
                   return prev.map((msg) => {
                     if (msg.id === placeholderId && msg.role === "assistant") {
-                      return { ...msg, content: msg.content + token };
+                      const newToolEvents = [
+                        ...(msg.toolEvents || []),
+                        {
+                          status: data.status || "Tool call started...",
+                          isLoading: true,
+                          success: false,
+                          tool: data.tool || "",
+                          tool_result: {},
+                        },
+                      ];
+                      currentToolEventIndex = newToolEvents.length - 1;
+                      console.log("🔧 Adding tool event:", newToolEvents);
+                      return { ...msg, toolEvents: newToolEvents };
                     }
                     return msg;
                   });
                 });
               }
-            }
-            // Handle toolCallStart events
-            else if (currentEvent === "toolCallStart") {
-              const data = JSON.parse(dataStr);
-              console.log("🔧 Tool call started:", data);
+              // Handle toolCallEnd events
+              else if (currentEvent === "toolCallEnd") {
+                const data = JSON.parse(dataStr);
+                console.log("✅ Tool call ended:", data);
 
-              // Add tool event to the assistant message's toolEvents array
-              setMessages((prev) => {
-                return prev.map((msg) => {
-                  if (msg.id === placeholderId && msg.role === "assistant") {
-                    const newToolEvents = [
-                      ...(msg.toolEvents || []),
-                      {
-                        status: data.status || "Tool call started...",
-                        isLoading: true,
-                        success: false,
-                        tool_result: {},
-                      },
-                    ];
-                    currentToolIndex = newToolEvents.length - 1;
-                    console.log("🔧 Adding tool event, new toolEvents:", newToolEvents);
-                    return { ...msg, toolEvents: newToolEvents };
-                  }
-                  return msg;
-                });
-              });
-            }
-            // Handle toolCallEnd events
-            else if (currentEvent === "toolCallEnd") {
-              const data = JSON.parse(dataStr);
-              console.log("✅ Tool call ended:", data);
-
-              // Update the last tool event in the assistant message
-              setMessages((prev) => {
-                return prev.map((msg) => {
-                  if (msg.id === placeholderId && msg.role === "assistant") {
-                    const toolEvents = [...(msg.toolEvents || [])];
-                    if (currentToolIndex !== null && toolEvents[currentToolIndex]) {
-                      toolEvents[currentToolIndex] = {
-                        status: data.status || "Tool call ended.",
-                        isLoading: false,
-                        success: data.success !== undefined ? data.success : false,
-                        tool_result: data.tool_result || {},
-                      };
-                      console.log("✅ Updated tool event at index", currentToolIndex, ":", toolEvents[currentToolIndex]);
+                setMessages((prev) => {
+                  return prev.map((msg) => {
+                    if (msg.id === placeholderId && msg.role === "assistant") {
+                      const toolEvents = [...(msg.toolEvents || [])];
+                      if (currentToolEventIndex !== null && toolEvents[currentToolEventIndex]) {
+                        toolEvents[currentToolEventIndex] = {
+                          status: data.status || "Tool call ended.",
+                          isLoading: false,
+                          success: data.success !== undefined ? data.success : false,
+                          tool: data.tool || "",
+                          tool_result: data.tool_result || {},
+                        };
+                        console.log("✅ Updated tool event:", toolEvents[currentToolEventIndex]);
+                      }
+                      return { ...msg, toolEvents };
                     }
-                    return { ...msg, toolEvents };
-                  }
-                  return msg;
+                    return msg;
+                  });
                 });
-              });
-              currentToolIndex = null;
+                currentToolEventIndex = null;
+              }
+              // Handle start event
+              else if (currentEvent === "start") {
+                console.log("🚀 Stream started");
+              }
+              // Handle end event
+              else if (currentEvent === "end") {
+                console.log("🏁 Stream ended");
+              }
+              // Handle warning event
+              else if (currentEvent === "warning") {
+                const data = JSON.parse(dataStr);
+                console.log("⚠️ Warning:", data);
+              }
+              // Handle error event
+              else if (currentEvent === "error") {
+                const data = JSON.parse(dataStr);
+                console.error("❌ Error:", data);
+                throw new Error(data.error || "Stream error");
+              }
+            } catch (e) {
+              console.error("❌ Error parsing SSE data:", e, "Data:", dataStr);
             }
-          } catch (e) {
-            console.error("❌ Error parsing SSE data:", e, "Data:", dataStr);
           }
         }
       }
-    }
-  } catch (error: any) {
-    if (error.name !== "AbortError") {
-      console.error("Stream error:", error);
-      // Remove placeholder and show error
-      setMessages((prev) =>
-        prev.filter((msg) => msg.id !== placeholderId).concat([
-          { role: "system", content: "Error: Failed to generate response." },
-        ])
-      );
-    }
-  } finally {
-    setIsLoading(false);
-    // Mark the last streaming message as complete
-    setMessages((prev) => {
-      console.log("🏁 Final messages:", prev);
-      return prev.map((msg) => {
-        if (msg.isStreaming) {
-          return { ...msg, isStreaming: false };
-        }
-        return msg;
+    } catch (error: any) {
+      if (error.name !== "AbortError") {
+        console.error("Stream error:", error);
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== placeholderId).concat([
+            { role: "system", content: `Error: ${error.message || "Failed to generate response."}` },
+          ])
+        );
+      }
+    } finally {
+      setIsLoading(false);
+      // Mark streaming as complete
+      setMessages((prev) => {
+        console.log("🏁 Final messages:", prev);
+        return prev.map((msg) => {
+          if (msg.id === placeholderId) {
+            return { ...msg, isStreaming: false, isThinking: false };
+          }
+          return msg;
+        });
       });
-    });
-    abortControllerRef.current = null;
-  }
-};
+      abortControllerRef.current = null;
+    }
+  };
+
   const stopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -546,7 +606,6 @@ const sendMessage = async (message: string, sessionId: string) => {
     }
   };
 
-  // Clear all messages
   const clearMessages = () => setMessages([]);
 
   return {

@@ -21,8 +21,7 @@ export default function Home() {
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  // No redirect for unauthenticated users; allow chat as guest
+  const shouldScrollRef = useRef(true);
 
   const {
     messages,
@@ -40,16 +39,34 @@ export default function Home() {
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    if (messagesEndRef.current) {
+    if (messagesEndRef.current && shouldScrollRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
+  // Detect if user scrolls up manually
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      shouldScrollRef.current = isNearBottom;
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
   // Load history when session changes
   useEffect(() => {
     if (history && Array.isArray(history)) {
+      console.log("📚 Loading chat history:", history);
       if (history.length > 0 || messages.length === 0) {
         setHistory(history);
+        // Scroll to bottom when history loads
+        shouldScrollRef.current = true;
       }
     } else if (sessionId === null) {
       setHistory([]);
@@ -57,60 +74,56 @@ export default function Home() {
   }, [history, sessionId]);
 
   const handleNewChat = () => {
+    console.log("🆕 Starting new chat");
     setSessionId(null);
-    setHistory([]);
+    clearMessages();
   };
 
   const handleSessionSelect = (id: string) => {
+    console.log("📂 Selecting session:", id);
     setSessionId(id);
-    setHistory([]);
+    clearMessages();
     // History will be loaded via effect
     if (window.innerWidth < 768) setIsSidebarOpen(false); // Close sidebar on mobile
   };
 
   const handleSend = async (text: string) => {
-    console.log("handleSend called with text:", text);
+    console.log("📤 handleSend called with text:", text);
     try {
       let currentSessionId = sessionId;
-      console.log(currentSessionId, "curerent seeesion");
+      console.log("Current session ID:", currentSessionId);
+      
       // Optimistically add user message
       addUserMessage(text);
+      
+      // Enable auto-scroll for new messages
+      shouldScrollRef.current = true;
 
       // If no session, create one first
       if (!currentSessionId) {
-        console.log("No session, creating new one...");
+        console.log("📝 No session, creating new one...");
         try {
           // Create session title from first 50 characters of message
           const sessionTitle = text.substring(0, 50) + (text.length > 50 ? "..." : "");
           
-          // createSession.mutateAsync(title) checks localStorage for user
           const session = await createSession.mutateAsync(sessionTitle);
           currentSessionId = session.session_id;
           setSessionId(currentSessionId);
-          console.log("Session created:", currentSessionId);
+          console.log("✅ Session created:", currentSessionId);
         } catch (error) {
-          console.error("Failed to create session", error);
+          console.error("❌ Failed to create session", error);
           return;
         }
       }
 
-      // Always pass latest user to sendMessage
-      console.log("Calling sendMessage with:", text, currentSessionId);
+      console.log("🚀 Calling sendMessage with session:", currentSessionId);
       await sendMessage(text, currentSessionId!);
-      console.log("sendMessage completed");
+      console.log("✅ sendMessage completed");
     } catch (error) {
-      console.error("Error in handleSend:", error);
+      console.error("❌ Error in handleSend:", error);
     }
   };
 
-  // if (isLoading) {
-  //   return (
-  //     <div className="flex h-screen items-center justify-center">
-  //       <Loader2 className="h-6 w-6 animate-spin" />
-  //     </div>
-  //   );
-  // }
-  
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar
@@ -149,23 +162,39 @@ export default function Home() {
                 Welcome to Tailfin AI
               </h2>
               <p className="text-muted-foreground max-w-md">
-                I'm here to help you with questions, analysis, code, and more.
-                Start a new conversation to begin.
+                {user 
+                  ? `Hey ${user.name || user.email}! I'm here to help you with questions, analysis, code, and more.`
+                  : "I'm here to help you with questions, analysis, code, and more. You're chatting as a guest - sign in to save your conversations."
+                }
               </p>
             </div>
           ) : (
             <div className="flex flex-col pb-4">
-              {messages.map((msg, i) => (
-                <ChatMessage
-                  key={i}
-                  role={msg.role}
-                  content={msg.content}
-                  isStreaming={msg.isStreaming}
-                  isThinking={msg.isThinking}
-                  toolEvents={msg.toolEvents}
-                />
-              ))}
+              {messages.map((msg, i) => {
+                console.log("Rendering message:", i, msg);
+                return (
+                  <ChatMessage
+                    key={msg.id || i}
+                    role={msg.role}
+                    content={msg.content}
+                    isStreaming={msg.isStreaming}
+                    isThinking={msg.isThinking}
+                    toolEvents={msg.toolEvents}
+                    toolCalls={msg.tool_calls} // Pass tool_calls from history
+                  />
+                );
+              })}
               <div ref={messagesEndRef} className="h-4" /> {/* Scroll anchor */}
+            </div>
+          )}
+          
+          {/* Loading indicator for history */}
+          {isHistoryLoading && messages.length === 0 && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Loading conversation...</span>
+              </div>
             </div>
           )}
         </div>
