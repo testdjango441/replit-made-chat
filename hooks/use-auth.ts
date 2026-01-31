@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
-const backendUrl = "https://b2966c6366f4.ngrok-free.app";
-
 export type User = {
   id: string;
   email: string;
@@ -39,13 +37,12 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      // Clear localStorage
+      // Clear all localStorage (or just auth items)
       localStorage.removeItem("auth_token");
       localStorage.removeItem("user");
       setUser(null);
-
-      // Redirect to login page
-      router.push("/login");
+      // Redirect to home page
+      router.push("/");
     } catch (error) {
       console.error("Logout error:", error);
     }

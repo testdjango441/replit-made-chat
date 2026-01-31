@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-const OPENAPI_URL = "https://b2966c6366f4.ngrok-free.app/openapi.json";
+const OPENAPI_URL = "http://localhost:8000/openapi.json";
 
 export function useOpenApiSpec() {
   return useQuery({

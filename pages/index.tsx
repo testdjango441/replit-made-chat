@@ -20,12 +20,7 @@ export default function Home() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/login");
-    }
-  }, [isLoading, user, router]);
+  // No redirect for unauthenticated users; allow chat as guest
 
   const {
     messages,
@@ -34,6 +29,7 @@ export default function Home() {
     stopGeneration,
     addUserMessage,
     setHistory,
+    clearMessages,
   } = useChatStream();
 
   const createSession = useCreateSession();
@@ -75,7 +71,11 @@ export default function Home() {
       if (!currentSessionId) {
         console.log("No session, creating new one...");
         try {
-          const session = await createSession.mutateAsync();
+          // Create session title from first 50 characters of message
+          const sessionTitle = text.substring(0, 50) + (text.length > 50 ? "..." : "");
+
+          // createSession.mutateAsync(title) checks localStorage for user
+          const session = await createSession.mutateAsync(sessionTitle);
           currentSessionId = session.session_id;
           setSessionId(currentSessionId);
           console.log("Session created:", currentSessionId);
@@ -85,7 +85,7 @@ export default function Home() {
         }
       }
 
-      // Send message via stream
+      // Always pass latest user to sendMessage
       console.log("Calling sendMessage with:", text, currentSessionId);
       await sendMessage(text, currentSessionId!);
       console.log("sendMessage completed");
@@ -94,13 +94,13 @@ export default function Home() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    );
-  }
+  // if (isLoading) {
+  //   return (
+  //     <div className="flex h-screen items-center justify-center">
+  //       <Loader2 className="h-6 w-6 animate-spin" />
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -110,6 +110,7 @@ export default function Home() {
         onNewChat={handleNewChat}
         isOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        clearMessages={clearMessages}
       />
 
       <main className="flex-1 flex flex-col h-full relative">
@@ -142,20 +143,16 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex flex-col pb-4">
-              {isHistoryLoading ? (
-                <div className="flex justify-center py-10">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                messages.map((msg, i) => (
-                  <ChatMessage
-                    key={i}
-                    role={msg.role}
-                    content={msg.content}
-                    isStreaming={msg.isStreaming}
-                  />
-                ))
-              )}
+              {messages.map((msg, i) => (
+                <ChatMessage
+                  key={i}
+                  role={msg.role}
+                  content={msg.content}
+                  isStreaming={msg.isStreaming}
+                  isThinking={msg.isThinking}
+                  toolEvents={msg.toolEvents}
+                />
+              ))}
               <div className="h-4" /> {/* Spacer */}
             </div>
           )}

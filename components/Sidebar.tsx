@@ -35,12 +35,22 @@ interface SidebarProps {
   toggleSidebar: () => void;
 }
 
+interface SidebarProps {
+  currentSessionId: string | null;
+  onSessionSelect: (id: string) => void;
+  onNewChat: () => void;
+  isOpen: boolean;
+  toggleSidebar: () => void;
+  clearMessages: () => void;
+}
+
 export function Sidebar({
   currentSessionId,
   onSessionSelect,
   onNewChat,
   isOpen,
   toggleSidebar,
+  clearMessages,
 }: SidebarProps) {
   const { user, logout, isAuthenticated } = useAuth();
   const { data: sessions, isLoading } = useChatSessions();
@@ -213,7 +223,14 @@ export function Sidebar({
             </div>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={() => logout()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    clearMessages();
+                    logout();
+                  }}
+                >
                   <LogOut className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
