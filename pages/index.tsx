@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { Sidebar } from "@/components/Sidebar";
 import { ChatMessage } from "@/components/ChatMessage";
@@ -19,6 +19,8 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // No redirect for unauthenticated users; allow chat as guest
 
@@ -35,6 +37,13 @@ export default function Home() {
   const createSession = useCreateSession();
   const { data: history, isLoading: isHistoryLoading } =
     useChatHistory(sessionId);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
   // Load history when session changes
   useEffect(() => {
@@ -73,7 +82,7 @@ export default function Home() {
         try {
           // Create session title from first 50 characters of message
           const sessionTitle = text.substring(0, 50) + (text.length > 50 ? "..." : "");
-
+          
           // createSession.mutateAsync(title) checks localStorage for user
           const session = await createSession.mutateAsync(sessionTitle);
           currentSessionId = session.session_id;
@@ -101,7 +110,7 @@ export default function Home() {
   //     </div>
   //   );
   // }
-
+  
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <Sidebar
@@ -127,7 +136,10 @@ export default function Home() {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
+        <div 
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto custom-scrollbar flex flex-col"
+        >
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
               <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
@@ -153,7 +165,7 @@ export default function Home() {
                   toolEvents={msg.toolEvents}
                 />
               ))}
-              <div className="h-4" /> {/* Spacer */}
+              <div ref={messagesEndRef} className="h-4" /> {/* Scroll anchor */}
             </div>
           )}
         </div>
