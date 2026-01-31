@@ -61,14 +61,12 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
 
         <div className="relative flex-1 overflow-hidden">
           <div className="font-semibold text-sm mb-1 opacity-90">
-            {isUser ? "You" : "Tailfin AI"}
+            {isUser ? "You" : "Assistant"}
           </div>
 
           <div className="prose prose-slate dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 break-words">
             {isThinking ? (
-              // Show "Thinking..." when waiting for first chunk
               <div className="flex items-center gap-2 py-2 text-muted-foreground">
-                <span className="text-sm italic">Thinking...</span>
                 <div className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -77,16 +75,16 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
               </div>
             ) : (
               <>
-                {/* Inline Tool Events - Display after content */}
-                {toolEvents && toolEvents.length > 0 && !isThinking && (
-                  <div className="mt-4 space-y-2">
+                {/* Inline Tool Events - Display BEFORE content */}
+                {toolEvents && toolEvents.length > 0 && (
+                  <div className="mb-4 space-y-2 not-prose">
                     {toolEvents.map((toolEvent, index) => (
                       <motion.div
                         key={index}
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
                         transition={{ duration: 0.3 }}
-                        className="overflow-hidden text-black"
+                        className="overflow-hidden"
                       >
                         <div
                           className={cn(
@@ -143,7 +141,7 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
                               className="overflow-hidden"
                             >
                               <div className="mt-2 p-3 rounded-md bg-muted/50 border border-border">
-                                <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+                                <pre className="text-xs overflow-x-auto whitespace-pre-wrap text-foreground">
                                   {JSON.stringify(toolEvent.tool_result, null, 2)}
                                 </pre>
                               </div>
@@ -154,6 +152,8 @@ export function ChatMessage({ role, content, isStreaming, isThinking, toolEvents
                     ))}
                   </div>
                 )}
+
+                {/* Markdown Content */}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
