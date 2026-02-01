@@ -7,13 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { SendHorizontal, Paperclip, Loader2, StopCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-
 interface ChatInputProps {
   onSend: (message: string, input_files?: string[]) => void;
   isLoading: boolean;
   onStop: () => void;
   disabled?: boolean;
 }
+
 export function ChatInput({
   onSend,
   isLoading,
@@ -72,8 +72,34 @@ export function ChatInput({
 
   return (
     <div className="max-w-3xl mx-auto p-4 relative">
-      <div className="relative flex items-end gap-2 bg-background border rounded-xl shadow-lg shadow-black/5 dark:shadow-white/5 p-3 focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-primary transition-all duration-200">
+      {/* Uploaded files pills - now above the input */}
+      {uploadedFiles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {uploadedFiles.map((file) => (
+            <Badge
+              key={file.s3_uri}
+              variant="secondary"
+              className="flex items-center gap-1.5 pr-1.5 py-1.5 px-3"
+            >
+              <span className="truncate max-w-[200px] text-sm">
+                {file.filename}
+              </span>
+              <button
+                type="button"
+                className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+                onClick={() => removeFile(file.s3_uri)}
+                tabIndex={-1}
+                aria-label={`Remove ${file.filename}`}
+                style={{ background: "none", border: "none", padding: 0 }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
 
+      <div className="relative flex items-end gap-2 bg-background border rounded-xl shadow-lg shadow-black/5 dark:shadow-white/5 p-3 focus-within:ring-2 focus-within:ring-ring/20 focus-within:border-primary transition-all duration-200">
         <Button
           variant="ghost"
           size="icon"
@@ -92,27 +118,6 @@ export function ChatInput({
           onChange={handleFileChange}
           disabled={disabled || isLoading || uploading}
         />
-
-        {/* Pills for uploaded files */}
-        {uploadedFiles.length > 0 && (
-          <div className="flex flex-wrap gap-2 items-center">
-            {uploadedFiles.map((file) => (
-              <Badge key={file.s3_uri} variant="secondary" className="flex items-center gap-1 pr-1">
-                <span className="truncate max-w-[120px]">{file.filename}</span>
-                <button
-                  type="button"
-                  className="ml-1 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={() => removeFile(file.s3_uri)}
-                  tabIndex={-1}
-                  aria-label="Remove attachment"
-                  style={{ background: "none", border: "none", padding: 0 }}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        )}
 
         <Textarea
           ref={textareaRef}
@@ -143,7 +148,7 @@ export function ChatInput({
               "shrink-0 rounded-lg h-9 w-9 transition-all duration-200",
               input.trim()
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-muted text-muted-foreground hover:bg-muted",
+                : "bg-muted text-muted-foreground hover:bg-muted"
             )}
             type="button"
           >
