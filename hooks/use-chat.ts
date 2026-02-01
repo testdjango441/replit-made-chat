@@ -368,7 +368,7 @@ export function useChatStream() {
     setMessages(history);
   };
 
-  const sendMessage = async (message: string, sessionId: string) => {
+  const sendMessage = async (message: string, sessionId: string, input_files?: string[]) => {
     setIsLoading(true);
 
     // Add placeholder assistant message with "Thinking..." immediately
@@ -408,8 +408,13 @@ export function useChatStream() {
             user_message: message,
             session_id: sessionId,
             user_email: user.email,
+            ...(input_files ? { input_files } : {}),
           }
-        : { user_message: message, session_id: sessionId };
+        : {
+            user_message: message,
+            session_id: sessionId,
+            ...(input_files ? { input_files } : {}),
+          };
 
       console.log("Chat request:", {
         endpoint,

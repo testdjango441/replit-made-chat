@@ -87,8 +87,8 @@ export default function Home() {
     if (window.innerWidth < 768) setIsSidebarOpen(false); // Close sidebar on mobile
   };
 
-  const handleSend = async (text: string) => {
-    console.log("📤 handleSend called with text:", text);
+  const handleSend = async (text: string, input_files?: string[]) => {
+    console.log("📤 handleSend called with text:", text, input_files);
     try {
       let currentSessionId = sessionId;
       console.log("Current session ID:", currentSessionId);
@@ -117,7 +117,7 @@ export default function Home() {
       }
 
       console.log("🚀 Calling sendMessage with session:", currentSessionId);
-      await sendMessage(text, currentSessionId!);
+      await sendMessage(text, currentSessionId!, input_files);
       console.log("✅ sendMessage completed");
     } catch (error) {
       console.error("❌ Error in handleSend:", error);
