@@ -357,10 +357,16 @@ export function useChatStream() {
   const { user } = useAuth();
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const addUserMessage = (content: string) => {
+  const addUserMessage = (content: string, input_files?: string[], fileMetadata?: Array<{s3_uri: string, filename: string}>) => {
     setMessages((prev) => [
       ...prev,
-      { role: "user", content, created_at: new Date().toISOString() },
+      { 
+        role: "user", 
+        content, 
+        input_files: input_files || [],
+        fileMetadata: fileMetadata || [],
+        created_at: new Date().toISOString() 
+      },
     ]);
   };
 
@@ -368,7 +374,7 @@ export function useChatStream() {
     setMessages(history);
   };
 
-  const sendMessage = async (message: string, sessionId: string, input_files?: string[]) => {
+  const sendMessage = async (message: string, sessionId: string, input_files?: string[], fileMetadata?: Array<{s3_uri: string, filename: string}>) => {
     setIsLoading(true);
 
     // Add placeholder assistant message with "Thinking..." immediately
@@ -383,6 +389,7 @@ export function useChatStream() {
         isThinking: true,
         toolEvents: [],
         toolCalls: [], // For completed tool calls
+        output_files: [],
         currentTurn: 0,
       },
     ]);

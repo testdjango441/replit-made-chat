@@ -87,14 +87,14 @@ export default function Home() {
     if (window.innerWidth < 768) setIsSidebarOpen(false); // Close sidebar on mobile
   };
 
-  const handleSend = async (text: string, input_files?: string[]) => {
-    console.log("📤 handleSend called with text:", text, input_files);
+  const handleSend = async (text: string, input_files?: string[], fileMetadata?: Array<{s3_uri: string, filename: string}>) => {
+    console.log("📤 handleSend called with text:", text, "files:", input_files, "metadata:", fileMetadata);
     try {
       let currentSessionId = sessionId;
       console.log("Current session ID:", currentSessionId);
       
-      // Optimistically add user message
-      addUserMessage(text);
+      // Optimistically add user message with file metadata
+      addUserMessage(text, input_files, fileMetadata);
       
       // Enable auto-scroll for new messages
       shouldScrollRef.current = true;
@@ -117,7 +117,7 @@ export default function Home() {
       }
 
       console.log("🚀 Calling sendMessage with session:", currentSessionId);
-      await sendMessage(text, currentSessionId!, input_files);
+      await sendMessage(text, currentSessionId!, input_files, fileMetadata);
       console.log("✅ sendMessage completed");
     } catch (error) {
       console.error("❌ Error in handleSend:", error);
@@ -181,6 +181,9 @@ export default function Home() {
                     isThinking={msg.isThinking}
                     toolEvents={msg.toolEvents}
                     toolCalls={msg.tool_calls} // Pass tool_calls from history
+                    input_files={msg.input_files} // Pass input files
+                    output_files={msg.output_files} // Pass output files
+                    fileMetadata={msg.fileMetadata} // Pass file metadata
                   />
                 );
               })}

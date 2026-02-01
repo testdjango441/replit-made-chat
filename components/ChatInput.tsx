@@ -8,7 +8,7 @@ import { SendHorizontal, Paperclip, Loader2, StopCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
-  onSend: (message: string, input_files?: string[]) => void;
+  onSend: (message: string, input_files?: string[], fileMetadata?: Array<{s3_uri: string, filename: string}>) => void;
   isLoading: boolean;
   onStop: () => void;
   disabled?: boolean;
@@ -49,7 +49,11 @@ export function ChatInput({
   const handleSubmit = () => {
     if (!input.trim() || isLoading) return;
     const input_files = uploadedFiles.map((f) => f.s3_uri);
-    onSend(input, input_files.length > 0 ? input_files : undefined);
+    const fileMetadata = uploadedFiles.map((f) => ({
+      s3_uri: f.s3_uri,
+      filename: f.filename
+    }));
+    onSend(input, input_files.length > 0 ? input_files : undefined, fileMetadata.length > 0 ? fileMetadata : undefined);
     setInput("");
     resetFiles();
     if (textareaRef.current) textareaRef.current.style.height = "inherit";

@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { User, Bot, Loader2, CheckCircle2, XCircle, ChevronDown, ChevronRight, Wrench } from "lucide-react";
+import { User, Bot, Loader2, CheckCircle2, XCircle, ChevronDown, ChevronRight, Wrench, Paperclip } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 
 interface ToolCall {
   id: string;
@@ -26,7 +27,30 @@ interface ChatMessageProps {
   isThinking?: boolean;
   toolEvents?: ToolEvent[];
   toolCalls?: ToolCall[]; // For completed tool calls from history
+  input_files?: string[]; // S3 URIs for user uploads
+  output_files?: string[]; // S3 URIs for assistant outputs
+  fileMetadata?: Array<{s3_uri: string, filename: string}>; // Optional metadata with filenames
 }
+
+// Helper function to extract filename from S3 URI
+const extractFilenameFromS3Uri = (s3Uri: string): string => {
+  try {
+    // S3 URI format: s3://bucket-name/path/to/filename.ext
+    const parts = s3Uri.split('/');
+    return parts[parts.length - 1] || s3Uri;
+  } catch {
+    return s3Uri;
+  }
+};
+
+// Helper function to get filename either from metadata or S3 URI
+const getFilename = (s3Uri: string, fileMetadata?: Array<{s3_uri: string, filename: string}>): string => {
+  if (fileMetadata) {
+    const meta = fileMetadata.find(f => f.s3_uri === s3Uri);
+    if (meta) return meta.filename;
+  }
+  return extractFilenameFromS3Uri(s3Uri);
+};
 
 export function ChatMessage({ 
   role, 
@@ -34,7 +58,10 @@ export function ChatMessage({
   isStreaming, 
   isThinking, 
   toolEvents,
-  toolCalls 
+  toolCalls,
+  input_files,
+  output_files,
+  fileMetadata
 }: ChatMessageProps) {
   const isUser = role === "user";
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
@@ -45,7 +72,9 @@ export function ChatMessage({
     role, 
     content: content?.substring(0, 50), 
     toolEvents,
-    toolCalls 
+    toolCalls,
+    input_files,
+    output_files 
   });
 
   const toggleToolExpand = (index: number) => {
@@ -109,6 +138,38 @@ export function ChatMessage({
               </div>
             ) : (
               <>
+                {/* Input Files (User Uploads) */}
+                {input_files && input_files.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2 not-prose">
+                    {input_files.map((s3Uri, index) => (
+                      <Badge
+                        key={index}
+                        variant="outline"
+                        className="flex items-center gap-1.5 py-1.5 px-3 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200"
+                      >
+                        <Paperclip className="w-3.5 h-3.5" />
+                        <span className="text-sm">{getFilename(s3Uri, fileMetadata)}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Output Files (Assistant Generated) */}
+                {output_files && output_files.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2 not-prose">
+                    {output_files.map((s3Uri, index) => (
+                      <Badge
+                        key={index}
+                        variant="outline"
+                        className="flex items-center gap-1.5 py-1.5 px-3 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50 text-green-800 dark:text-green-200"
+                      >
+                        <Paperclip className="w-3.5 h-3.5" />
+                        <span className="text-sm">{getFilename(s3Uri, fileMetadata)}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
                 {/* Tool Calls from History (Completed) */}
                 {toolCalls && toolCalls.length > 0 && (
                   <div className="mb-4 space-y-2 not-prose">
