@@ -125,6 +125,43 @@ export function ChatMessage({
           <div className="font-semibold text-sm mb-1 opacity-90">
             {isUser ? "You" : "Assistant"}
           </div>
+          
+          {/* Files displayed below the name for both user and assistant */}
+          {((input_files && input_files.length > 0) || (output_files && output_files.length > 0)) && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {/* Input Files (User Uploads) */}
+              {input_files && input_files.length > 0 && (
+                <>
+                  {input_files.map((s3Uri, index) => (
+                    <Badge
+                      key={index}
+                      variant="outline"
+                      className="flex items-center gap-1.5 py-1 px-2 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200"
+                    >
+                      <Paperclip className="w-3 h-3" />
+                      <span className="text-xs">{getFilename(s3Uri, fileMetadata)}</span>
+                    </Badge>
+                  ))}
+                </>
+              )}
+
+              {/* Output Files (Assistant Generated) */}
+              {output_files && output_files.length > 0 && (
+                <>
+                  {output_files.map((s3Uri, index) => (
+                    <Badge
+                      key={index}
+                      variant="outline"
+                      className="flex items-center gap-1.5 py-1 px-2 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50 text-green-800 dark:text-green-200"
+                    >
+                      <Paperclip className="w-3 h-3" />
+                      <span className="text-xs">{getFilename(s3Uri, fileMetadata)}</span>
+                    </Badge>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
 
           <div className="prose prose-slate dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 break-words">
             {isThinking ? (
@@ -138,37 +175,6 @@ export function ChatMessage({
               </div>
             ) : (
               <>
-                {/* Input Files (User Uploads) */}
-                {input_files && input_files.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2 not-prose">
-                    {input_files.map((s3Uri, index) => (
-                      <Badge
-                        key={index}
-                        variant="outline"
-                        className="flex items-center gap-1.5 py-1.5 px-3 bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200"
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                        <span className="text-sm">{getFilename(s3Uri, fileMetadata)}</span>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {/* Output Files (Assistant Generated) */}
-                {output_files && output_files.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2 not-prose">
-                    {output_files.map((s3Uri, index) => (
-                      <Badge
-                        key={index}
-                        variant="outline"
-                        className="flex items-center gap-1.5 py-1.5 px-3 bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50 text-green-800 dark:text-green-200"
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                        <span className="text-sm">{getFilename(s3Uri, fileMetadata)}</span>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
 
                 {/* Tool Calls from History (Completed) */}
                 {toolCalls && toolCalls.length > 0 && (
@@ -328,26 +334,39 @@ export function ChatMessage({
                 )}
 
                 {/* Markdown Content */}
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                    code: ({ node, className, children, ...props }) => {
-                      const match = /language-(\w+)/.exec(className || '')
-                      return !className?.includes('language-') ? (
-                        <code className="bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono" {...props}>
-                          {children}
-                        </code>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      )
-                    }
-                  }}
-                >
-                  {content || ""}
-                </ReactMarkdown>
+                {isUser ? (
+                  // For user messages, preserve line breaks without markdown processing
+                  <div className="text-foreground">
+                    {content?.split('\n').map((line, i) => (
+                      <span key={i}>
+                        {line}
+                        {i < (content?.split('\n').length || 0) - 1 && <br />}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  // For assistant messages, use markdown
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      code: ({ node, className, children, ...props }) => {
+                        const match = /language-(\w+)/.exec(className || '')
+                        return !className?.includes('language-') ? (
+                          <code className="bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono" {...props}>
+                            {children}
+                          </code>
+                        ) : (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        )
+                      }
+                    }}
+                  >
+                    {content || ""}
+                  </ReactMarkdown>
+                )}
                 {isStreaming && (
                   <span className="inline-block w-2 h-4 align-middle ml-1 bg-primary animate-pulse" />
                 )}
